@@ -18,7 +18,7 @@ class device_container
     // Helper struct per pipeline
     struct view_port
     {
-		rs2::device dev;
+		std::string dev;
         std::map<int, rs2::frame> frames_per_stream;
         rs2::colorizer colorize_frame;
         texture tex;
@@ -50,7 +50,7 @@ public:
         // Start the pipeline with the configuration
         rs2::pipeline_profile profile = p.start(c);
         // Hold it internally
-        _devices.emplace(serial_number, view_port{ {},{},{},{}, p, profile });
+        _devices.emplace(serial_number, view_port{ serial_number,{},{},{}, p, profile });
 
     }
 
@@ -101,7 +101,7 @@ public:
         // Go over all device
         for (auto&& view : _devices)
         {
-			//printf("sn: %s\n", view.second.dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+			printf("sn: %s\n", view.second.dev.c_str());
             // Ask each pipeline if there are new frames available
             rs2::frameset frameset;
             if (view.second.pipe.poll_for_frames(&frameset))
