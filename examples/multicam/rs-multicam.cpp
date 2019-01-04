@@ -9,6 +9,15 @@
 #include <algorithm>
 #include <mutex>                    // std::mutex, std::lock_guard
 #include <cmath>                    // std::ceil
+#include <fstream>              // File IO
+#include <iostream>             // Terminal IO
+#include <sstream>              // Stringstreams
+
+// 3rd party header for writing png files
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
+
 
 const std::string no_camera_message = "No camera connected, please connect 1 or more";
 const std::string platform_camera_name = "Platform Camera";
@@ -98,6 +107,10 @@ public:
     void poll_frames()
     {
         std::lock_guard<std::mutex> lock(_mutex);
+
+		// Declare depth colorizer for pretty visualization of depth data
+		rs2::colorizer color_map;
+
         // Go over all device
         for (auto&& view : _devices)
         {
@@ -120,14 +133,61 @@ public:
 					auto frm_id = frame.get_frame_number();
 					auto frm_cnt = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
 					auto frm_tp = rs2_stream_to_string(frame.get_profile().stream_type());
-					printf("%s id=%lld cnt=%lld tsbk=%lld %lld %lld %lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+					printf("                %s id=%lld cnt=%lld tsbk=%lld %lld %lld %lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
 
                     int stream_id = frame.get_profile().unique_id();
                     view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
-                }
+                
+					//save image t odisk 
+					// We can only save video frames as pngs, so we skip the rest
+					if (auto vf = frame.as<rs2::video_frame>())
+					{
+						auto stream = frame.get_profile().stream_type();
+						// Use the colorizer to get an rgb image for the depth stream
+						if (vf.is<rs2::depth_frame>()) vf = color_map.process(frame);
+
+						// Write images to disk
+						std::stringstream png_file;
+						png_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name() << ".png";
+						stbi_write_png(png_file.str().c_str(), vf.get_width(), vf.get_height(),
+							vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
+						std::cout << "Saved " << png_file.str() << std::endl;
+					
+						// Record per-frame metadata for UVC streams
+						std::stringstream csv_file;
+						csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
+							<< "-metadata.csv";
+						metadata_to_csv(vf, csv_file.str());
+					}
+
+
+				}
             }
         }
     }
+
+	void metadata_to_csv(const rs2::frame& frm, const std::string& filename)
+	{
+		std::ofstream csv;
+
+		csv.open(filename);
+
+		//    std::cout << "Writing metadata to " << filename << endl;
+		csv << "Stream," << rs2_stream_to_string(frm.get_profile().stream_type()) << "\nMetadata Attribute,Value\n";
+
+		// Record all the available metadata attributes
+		for (size_t i = 0; i < RS2_FRAME_METADATA_COUNT; i++)
+		{
+			if (frm.supports_frame_metadata((rs2_frame_metadata_value)i))
+			{
+				csv << rs2_frame_metadata_to_string((rs2_frame_metadata_value)i) << ","
+					<< frm.get_frame_metadata((rs2_frame_metadata_value)i) << "\n";
+			}
+		}
+
+		csv.close();
+	}
+
     void render_textures(int cols, int rows, float view_width, float view_height)
     {
         std::lock_guard<std::mutex> lock(_mutex);
