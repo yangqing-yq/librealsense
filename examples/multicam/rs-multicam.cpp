@@ -18,6 +18,7 @@ class device_container
     // Helper struct per pipeline
     struct view_port
     {
+		rs2::device dev;
         std::map<int, rs2::frame> frames_per_stream;
         rs2::colorizer colorize_frame;
         texture tex;
@@ -49,7 +50,7 @@ public:
         // Start the pipeline with the configuration
         rs2::pipeline_profile profile = p.start(c);
         // Hold it internally
-        _devices.emplace(serial_number, view_port{ {},{},{}, p, profile });
+        _devices.emplace(serial_number, view_port{ {},{},{},{}, p, profile });
 
     }
 
@@ -100,15 +101,29 @@ public:
         // Go over all device
         for (auto&& view : _devices)
         {
+			//printf("sn: %s\n", view.second.dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
             // Ask each pipeline if there are new frames available
             rs2::frameset frameset;
             if (view.second.pipe.poll_for_frames(&frameset))
             {
+
+				//printf("%s, ae=%lld\n", rs2_stream_to_string(frame.get_profile().stream_type()), exp);
+
                 for (int i = 0; i < frameset.size(); i++)
                 {
-                    rs2::frame new_frame = frameset[i];
-                    int stream_id = new_frame.get_profile().unique_id();
-                    view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(new_frame); //update view port with the new stream
+                    rs2::frame frame = frameset[i];
+					//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
+					auto ts_bkend = frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+					auto ts_toa = frame.get_frame_metadata(RS2_FRAME_METADATA_TIME_OF_ARRIVAL);
+					auto ts_frame = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP);
+					auto ts_sensor = frame.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
+					auto frm_id = frame.get_frame_number();
+					auto frm_cnt = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+					auto frm_tp = rs2_stream_to_string(frame.get_profile().stream_type());
+					printf("%s id=%lld cnt=%lld tsbk=%lld %lld %lld %lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+
+                    int stream_id = frame.get_profile().unique_id();
+                    view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
                 }
             }
         }
