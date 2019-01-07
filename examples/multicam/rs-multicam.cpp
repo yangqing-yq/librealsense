@@ -3,7 +3,9 @@
 
 #include <librealsense2/rs.hpp>     // Include RealSense Cross Platform API
 #include "example.hpp"              // Include short list of convenience functions for rendering
+#include <librealsense2/hpp/rs_frame.hpp>
 
+#include <thread>
 #include <string>
 #include <map>
 #include <algorithm>
@@ -12,11 +14,14 @@
 #include <fstream>              // File IO
 #include <iostream>             // Terminal IO
 #include <sstream>              // Stringstreams
+#include <librealsense2/rs_advanced_mode.hpp>
+#include <librealsense2/rsutil.h>
 
 // 3rd party header for writing png files
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+using namespace rs400;
 
 
 const std::string no_camera_message = "No camera connected, please connect 1 or more";
@@ -104,6 +109,35 @@ public:
         return count;
     }
 
+	//int save_to_raw(uint16_t *image, int imageWidth, int imageHeight, const char *filename)
+	//{
+	//	char fname_bmp[128];
+	//	sprintf(fname_bmp, "%s.raw", filename);
+
+	//	FILE *fp;
+	//	if (!(fp = fopen(fname_bmp, "wb")))
+	//		return -1;
+	//	fwrite(image, sizeof(uint16_t), (size_t)(long)imageWidth*imageHeight, fp);
+	//	fclose(fp);
+	//	return 0;
+	//}
+	
+	bool save_frame_raw_data(const std::string& filename, rs2::frame frame)
+	{
+		bool ret = false;
+		auto image = frame.as<rs2::video_frame>();
+		if (image)
+		{
+			std::ofstream outfile(filename.data(), std::ofstream::binary);
+			outfile.write(static_cast<const char*>(image.get_data()), image.get_height()*image.get_stride_in_bytes());
+
+			outfile.close();
+			ret = true;
+		}
+
+		return ret;
+	}
+
     void poll_frames()
     {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -138,26 +172,44 @@ public:
                     int stream_id = frame.get_profile().unique_id();
                     view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
                 
-					//save image t odisk 
+					//save image to disk 
 					// We can only save video frames as pngs, so we skip the rest
 					if (auto vf = frame.as<rs2::video_frame>())
 					{
 						auto stream = frame.get_profile().stream_type();
 						// Use the colorizer to get an rgb image for the depth stream
-						if (vf.is<rs2::depth_frame>()) vf = color_map.process(frame);
+						if (vf.is<rs2::depth_frame>()) //vf = color_map.process(frame);
+						{
+							//save depth to raw
+							std::stringstream raw_file;
+							std::string raw_filename;
+							raw_file << view.second.dev.c_str() << ts_bkend << "-" << vf.get_profile().stream_name() << ".raw";
+							raw_file >> raw_filename;
+							raw_filename = ".\\images\\" + raw_filename;
+							if (save_frame_raw_data(raw_filename, frame))
+								std::cout << "Raw data is captured into " << raw_filename << std::endl;
+						}
 
-						// Write images to disk
-						std::stringstream png_file;
-						png_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name() << ".png";
-						stbi_write_png(png_file.str().c_str(), vf.get_width(), vf.get_height(),
-							vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
-						std::cout << "Saved " << png_file.str() << std::endl;
-					
-						// Record per-frame metadata for UVC streams
-						std::stringstream csv_file;
-						csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
-							<< "-metadata.csv";
-						metadata_to_csv(vf, csv_file.str());
+						else
+						{
+							// Write images to disk
+							std::stringstream png_file;
+							std::string png_filename;
+							png_file << view.second.dev.c_str()<< ts_bkend << "-" << vf.get_profile().stream_name() << ".png";
+							png_file >> png_filename;
+							png_filename = ".\\images\\" + png_filename;
+							stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
+								vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
+							std::cout << "Saved " << png_filename << std::endl;
+# if(0)
+							// Record per-frame metadata for UVC streams
+							std::stringstream csv_file;
+							csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
+								<< "-metadata.csv";
+							metadata_to_csv(vf, csv_file.str());
+# endif
+						}
+
 					}
 
 
