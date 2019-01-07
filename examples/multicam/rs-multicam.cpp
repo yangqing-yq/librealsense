@@ -183,7 +183,9 @@ public:
 							//save depth to raw
 							std::stringstream raw_file;
 							std::string raw_filename;
-							raw_file << view.second.dev.c_str() << ts_bkend << "-" << vf.get_profile().stream_name() << ".raw";
+							//raw_file <<"sn"<<view.second.dev <<"_ts"<<ts_bkend<<"_cnt"<<frm_cnt<< "-" << vf.get_profile().stream_name() << ".raw";
+							//raw_file << vf.get_profile().stream_name()<<"_sn"<<view.second.dev << "_cnt" <<frm_cnt<<"_ts"<<ts_bkend<< ".raw";
+							raw_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn"<<view.second.dev <<"_"<< vf.get_profile().stream_name() << ".raw";
 							raw_file >> raw_filename;
 							raw_filename = ".\\images\\" + raw_filename;
 							if (save_frame_raw_data(raw_filename, frame))
@@ -195,7 +197,7 @@ public:
 							// Write images to disk
 							std::stringstream png_file;
 							std::string png_filename;
-							png_file << view.second.dev.c_str()<< ts_bkend << "-" << vf.get_profile().stream_name() << ".png";
+							png_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn" << view.second.dev << "_" << vf.get_profile().stream_name() << ".png";
 							png_file >> png_filename;
 							png_filename = ".\\images\\" + png_filename;
 							stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
