@@ -42,6 +42,9 @@ class device_container
 
 public:
 
+	//std::vector<rs2::frameset> list;
+	std::vector<std::pair<std::string,rs2::frame>> list;
+
     void enable_device(rs2::device dev)
     {
         std::string serial_number(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
@@ -146,79 +149,132 @@ public:
 		rs2::colorizer color_map;
 
         // Go over all device
-        for (auto&& view : _devices)
-        {
-			printf("sn: %s\n", view.second.dev.c_str());
-            // Ask each pipeline if there are new frames available
-            rs2::frameset frameset;
-            if (view.second.pipe.poll_for_frames(&frameset))
-            {
 
-				//printf("%s, ae=%lld\n", rs2_stream_to_string(frame.get_profile().stream_type()), exp);
+			for (auto&& view : _devices)
+			{
+				printf("sn: %s\n", view.second.dev);
+				sn_frame.first = view.second.dev;
+				// Ask each pipeline if there are new frames available
+				rs2::frameset frameset;
+				if (view.second.pipe.poll_for_frames(&frameset))
+				{
+					////keep frame
+					//auto raw_data = frameset.get_depth_frame();
+					//raw_data.keep();
+					//list.push_back(raw_data);
+					//std::_Count_pr << list.size << std::endl;
 
-                for (int i = 0; i < frameset.size(); i++)
-                {
-                    rs2::frame frame = frameset[i];
-					//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
-					auto ts_bkend = frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
-					auto ts_toa = frame.get_frame_metadata(RS2_FRAME_METADATA_TIME_OF_ARRIVAL);
-					auto ts_frame = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP);
-					auto ts_sensor = frame.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
-					auto frm_id = frame.get_frame_number();
-					auto frm_cnt = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
-					auto frm_tp = rs2_stream_to_string(frame.get_profile().stream_type());
-					printf("                %s id=%lld cnt=%lld tsbk=%lld %lld %lld %lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+					//printf("%s, ae=%lld\n", rs2_stream_to_string(frame.get_profile().stream_type()), exp);
 
-                    int stream_id = frame.get_profile().unique_id();
-                    view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
-                
-					//save image to disk 
-					// We can only save video frames as pngs, so we skip the rest
-					if (auto vf = frame.as<rs2::video_frame>())
+					for (int i = 0; i < frameset.size(); i++)
 					{
-						auto stream = frame.get_profile().stream_type();
-						// Use the colorizer to get an rgb image for the depth stream
-						if (vf.is<rs2::depth_frame>()) //vf = color_map.process(frame);
-						{
-							//save depth to raw
-							std::stringstream raw_file;
-							std::string raw_filename;
-							//raw_file <<"sn"<<view.second.dev <<"_ts"<<ts_bkend<<"_cnt"<<frm_cnt<< "-" << vf.get_profile().stream_name() << ".raw";
-							//raw_file << vf.get_profile().stream_name()<<"_sn"<<view.second.dev << "_cnt" <<frm_cnt<<"_ts"<<ts_bkend<< ".raw";
-							raw_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn"<<view.second.dev <<"_"<< vf.get_profile().stream_name() << ".raw";
-							raw_file >> raw_filename;
-							raw_filename = ".\\images\\" + raw_filename;
-							if (save_frame_raw_data(raw_filename, frame))
-								std::cout << "Raw data is captured into " << raw_filename << std::endl;
-						}
+						rs2::frame frame = frameset[i];
+						//keep frame
+						//auto raw_data = frameset.get_depth_frame();
+						//raw_data.keep();
+						frame.keep();
+						sn_frame.second = frame;
+						list.push_back(sn_frame);
 
-						else
-						{
-							// Write images to disk
-							std::stringstream png_file;
-							std::string png_filename;
-							png_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn" << view.second.dev << "_" << vf.get_profile().stream_name() << ".png";
-							png_file >> png_filename;
-							png_filename = ".\\images\\" + png_filename;
-							stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
-								vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
-							std::cout << "Saved " << png_filename << std::endl;
-# if(0)
-							// Record per-frame metadata for UVC streams
-							std::stringstream csv_file;
-							csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
-								<< "-metadata.csv";
-							metadata_to_csv(vf, csv_file.str());
-# endif
-						}
+						//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
+						auto ts_bkend = frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+						auto ts_toa = frame.get_frame_metadata(RS2_FRAME_METADATA_TIME_OF_ARRIVAL);
+						auto ts_frame = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP);
+						auto ts_sensor = frame.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
+						auto frm_id = frame.get_frame_number();
+						auto frm_cnt = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+						auto frm_tp = rs2_stream_to_string(frame.get_profile().stream_type());
+						printf("                %s id=%lld cnt=%lld tsbk=%lld tstoa=%lld tsf=%lld tss=%lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+
+						int stream_id = frame.get_profile().unique_id();
+						view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
+
 
 					}
-
-
 				}
-            }
-        }
+			}
+
+		
     }
+
+	void save_frames()
+	{
+		//std::lock_guard<std::mutex> lock(_mutex);
+
+		std::cout << "list size = " << list.size() << std::endl;
+		for (auto frame : list)
+		{
+
+				//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
+				auto ts_bkend = frame.second.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+				//auto ts_toa = frame.get_frame_metadata(RS2_FRAME_METADATA_TIME_OF_ARRIVAL);
+				//auto ts_frame = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP);
+				//auto ts_sensor = frame.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
+				//auto frm_id = frame.get_frame_number();
+				auto frm_cnt = frame.second.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+				auto frm_tp = rs2_stream_to_string(frame.second.get_profile().stream_type());
+				//printf("                %s id=%lld cnt=%lld tsbk=%lld tstoa=%lld tsf=%lld tss=%lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+
+				//save image to disk 
+				// We can only save video frames as pngs, so we skip the rest
+				if (auto vf = frame.second.as<rs2::video_frame>())
+				{
+
+					auto stream = frame.second.get_profile().stream_type();
+
+					// Use the colorizer to get an rgb image for the depth stream
+					if (vf.is<rs2::depth_frame>()) //vf = color_map.process(frame);
+					{
+						//save depth to raw
+						std::stringstream raw_file;
+						std::string raw_filename;
+						//raw_file <<"sn"<<view.second.dev <<"_ts"<<ts_bkend<<"_cnt"<<frm_cnt<< "-" << vf.get_profile().stream_name() << ".raw";
+						//raw_file << vf.get_profile().stream_name()<<"_sn"<<view.second.dev << "_cnt" <<frm_cnt<<"_ts"<<ts_bkend<< ".raw";
+						raw_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn" << frame.first << "_" << vf.get_profile().stream_name() << ".raw";
+						//raw_file << "fc" << frm_cnt << "_ts" << ts_bkend << vf.get_profile().stream_name() << ".raw";
+
+						raw_file >> raw_filename;
+						raw_filename = ".\\images\\" + raw_filename;
+						if (save_frame_raw_data(raw_filename, frame.second))
+							std::cout << "Raw data is captured into " << raw_filename << std::endl;
+					}
+# if(1) 
+					else
+					{
+						// Write images to disk
+						std::stringstream png_file;
+						std::string png_filename;
+						png_file << "fc" << frm_cnt << "_ts" << ts_bkend << "_sn" << frame.first << "_" << vf.get_profile().stream_name() << ".png";
+						png_file >> png_filename;
+						png_filename = ".\\images\\" + png_filename;
+						stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
+							vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
+						std::cout << "Saved " << png_filename << std::endl;
+
+						//// Record per-frame metadata for UVC streams
+						//std::stringstream csv_file;
+						//csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
+						//	<< "-metadata.csv";
+						//metadata_to_csv(vf, csv_file.str());
+
+					}
+# endif
+				}
+
+				
+			
+		}
+	}
+
+	void rank_frames()
+	{
+
+	}
+
+	void clear_frames()
+	{
+		list.clear();
+	}
 
 	void metadata_to_csv(const rs2::frame& frm, const std::string& filename)
 	{
@@ -263,6 +319,7 @@ public:
 private:
     std::mutex _mutex;
     std::map<std::string, view_port> _devices;
+	std::pair<std::string, rs2::frame> sn_frame;
 };
 
 
@@ -291,9 +348,22 @@ int main(int argc, char * argv[]) try
         connected_devices.enable_device(dev);
     }
 
+	int index = 0;
     while (app) // Application still alive?
     {
         connected_devices.poll_frames();
+		index++;
+
+		//save raw when got frameset num = 10 * camera num
+		printf("index=%d\n", index);
+		while (index >= 10) {
+			connected_devices.save_frames();
+			connected_devices.clear_frames();
+			index = 0;
+		}
+
+
+
         auto total_number_of_streams = connected_devices.stream_count();
         if (total_number_of_streams == 0)
         {
