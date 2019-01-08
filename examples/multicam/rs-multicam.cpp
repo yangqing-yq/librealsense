@@ -23,9 +23,27 @@
 
 using namespace rs400;
 
-
 const std::string no_camera_message = "No camera connected, please connect 1 or more";
 const std::string platform_camera_name = "Platform Camera";
+
+static const std::vector<uint8_t> master_command{
+	0x14, 0x00, 0xab, 0xcd, 0x64, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const std::vector<uint8_t> slave_command{
+	0x14, 0x00, 0xab, 0xcd, 0x64, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const std::vector<uint8_t> master_gpio_dir_command{
+	0x18, 0x00, 0xab, 0xcd, 0x02, 0x00, 0x00, 0x00, 0x30, 0x20, 0x01, 0x00,
+	0x34, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x44, 0x4C, 0x21, 0x00 };
+static const std::vector<uint8_t> master_gpio_toggle_command{
+	0x18, 0x00, 0xab, 0xcd, 0x02, 0x00, 0x00, 0x00, 0x34, 0x20, 0x01, 0x00,
+	0x38, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x40, 0x44, 0x21, 0x00 };
+static const std::vector<uint8_t> master_gpio_dir_chk_command{
+	0x14, 0x00, 0xab, 0xcd, 0x02, 0x00, 0x00, 0x00, 0x30, 0x20, 0x01, 0x00,
+	0x34, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
 
 class device_container
 {
@@ -70,6 +88,44 @@ public:
         _devices.emplace(serial_number, view_port{ serial_number,{},{},{}, p, profile });
 
     }
+
+	void set_masterslave(rs2::context ctx)
+	{
+		std::string MASTER_SERIAL = ctx.query_devices()[0].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+		for (auto&& dev : ctx.query_devices()) {
+			const std::string serial = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+			fprintf(stderr, "Starting serial %s\n", serial.c_str());
+
+			auto depth = dev.first<rs2::depth_sensor>();
+			if (depth.supports(RS2_OPTION_INTER_CAM_SYNC_MODE)) {
+				int mode = (serial == MASTER_SERIAL ? 1 : 2);
+				printf("Set sync mode = %d\n", mode);
+				depth.set_option(RS2_OPTION_INTER_CAM_SYNC_MODE, mode);
+				std::cout<<"Read sync mode ="<<depth.get_option(RS2_OPTION_INTER_CAM_SYNC_MODE)<<std::endl;
+
+				////Set manual exp and disable laser
+				//for (rs2::sensor& sensor : dev.query_sensors()) {
+				//	if (rs2::depth_sensor dpt = sensor.as<rs2::depth_sensor>()) {
+
+				//		if (dpt.supports(RS2_OPTION_EXPOSURE)) {
+
+				//			dpt.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0.0f);
+				//			dpt.set_option(RS2_OPTION_EXPOSURE, 30000.0f);
+				//		}
+				//		if (dpt.supports(RS2_OPTION_EMITTER_ENABLED)) {
+
+				//			dpt.set_option(RS2_OPTION_EMITTER_ENABLED, 0.0f);
+				//		}
+
+				//	}
+				//	else if (sensor.supports(RS2_OPTION_EXPOSURE)) {
+
+				//		sensor.set_option(RS2_OPTION_EXPOSURE, 30000.0f);
+				//	}
+				//}
+			}
+		}
+	}
 
     void remove_devices(const rs2::event_information& info)
     {
@@ -148,6 +204,8 @@ public:
 		// Declare depth colorizer for pretty visualization of depth data
 		rs2::colorizer color_map;
 
+		skip_frame_num++;
+
         // Go over all device
 
 			for (auto&& view : _devices)
@@ -172,9 +230,12 @@ public:
 						//keep frame
 						//auto raw_data = frameset.get_depth_frame();
 						//raw_data.keep();
+						if(skip_frame_num>0)
+						{ 
 						frame.keep();
 						sn_frame.second = frame;
-						list.push_back(sn_frame);
+						list.emplace_back(sn_frame);
+						}
 
 						//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
 						auto ts_bkend = frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
@@ -193,9 +254,19 @@ public:
 					}
 				}
 			}
-
 		
     }
+
+	void rank_frames()
+	{
+
+
+
+
+
+
+
+	}
 
 	void save_frames()
 	{
@@ -268,10 +339,7 @@ public:
 		}
 	}
 
-	void rank_frames()
-	{
 
-	}
 
 	void clear_frames()
 	{
@@ -322,6 +390,7 @@ private:
     std::mutex _mutex;
     std::map<std::string, view_port> _devices;
 	std::pair<std::string, rs2::frame> sn_frame;
+	int skip_frame_num = -10;
 };
 
 
@@ -349,16 +418,16 @@ int main(int argc, char * argv[]) try
     {
         connected_devices.enable_device(dev);
     }
+	connected_devices.set_masterslave(ctx);
 
-	int index = 20;
-    while (index>0) // Application still alive?
+	int index = 0;
+    while (index<30) // Application still alive?
     {
         connected_devices.poll_frames();
-		index--;
+		index++;
 
 		//save raw when got frameset num = 10 * camera num
 		printf("index=%d\n", index);
-
 
 
 
@@ -381,7 +450,7 @@ int main(int argc, char * argv[]) try
 
         connected_devices.render_textures(cols, rows, view_width, view_height);
     }
-	
+	//connected_devices.rank_frames();
 	connected_devices.save_frames();
 	connected_devices.clear_frames();
 	//index = 0;
