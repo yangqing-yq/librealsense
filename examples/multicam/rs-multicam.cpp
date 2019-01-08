@@ -152,7 +152,7 @@ public:
 
 			for (auto&& view : _devices)
 			{
-				printf("sn: %s\n", view.second.dev);
+				printf("sn: %s\n", view.second.dev.c_str());
 				sn_frame.first = view.second.dev;
 				// Ask each pipeline if there are new frames available
 				rs2::frameset frameset;
@@ -238,9 +238,10 @@ public:
 						if (save_frame_raw_data(raw_filename, frame.second))
 							std::cout << "Raw data is captured into " << raw_filename << std::endl;
 					}
-# if(1) 
+ 
 					else
 					{
+						//cause delay
 						// Write images to disk
 						std::stringstream png_file;
 						std::string png_filename;
@@ -250,15 +251,16 @@ public:
 						stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
 							vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
 						std::cout << "Saved " << png_filename << std::endl;
-
+# if(0)
 						//// Record per-frame metadata for UVC streams
 						//std::stringstream csv_file;
 						//csv_file << "rs-save-to-disk-output-" << vf.get_profile().stream_name()
 						//	<< "-metadata.csv";
 						//metadata_to_csv(vf, csv_file.str());
 
-					}
+					
 # endif
+					}
 				}
 
 				
@@ -348,19 +350,15 @@ int main(int argc, char * argv[]) try
         connected_devices.enable_device(dev);
     }
 
-	int index = 0;
-    while (app) // Application still alive?
+	int index = 20;
+    while (index>0) // Application still alive?
     {
         connected_devices.poll_frames();
-		index++;
+		index--;
 
 		//save raw when got frameset num = 10 * camera num
 		printf("index=%d\n", index);
-		while (index >= 10) {
-			connected_devices.save_frames();
-			connected_devices.clear_frames();
-			index = 0;
-		}
+
 
 
 
@@ -383,7 +381,11 @@ int main(int argc, char * argv[]) try
 
         connected_devices.render_textures(cols, rows, view_width, view_height);
     }
-
+	
+	connected_devices.save_frames();
+	connected_devices.clear_frames();
+	//index = 0;
+	
     return EXIT_SUCCESS;
 }
 catch (const rs2::error & e)
