@@ -79,13 +79,17 @@ public:
             return;
         }
         // Create a pipeline from the given device
-        rs2::pipeline p;
-        rs2::config c;
-        c.enable_device(serial_number);
+        rs2::pipeline pipe;
+        rs2::config cfg;
+        cfg.enable_device(serial_number);
+		//cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, 30);
+		//cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, 30);
+		//rs->config.enable_stream(RS2_STREAM_INFRARED, 1280, 720, RS2_FORMAT_Y8, 30);
+		//cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, 30);
         // Start the pipeline with the configuration
-        rs2::pipeline_profile profile = p.start(c);
+        rs2::pipeline_profile profile = pipe.start(cfg);
         // Hold it internally
-        _devices.emplace(serial_number, view_port{ serial_number,{},{},{}, p, profile });
+        _devices.emplace(serial_number, view_port{ serial_number,{},{},{}, pipe, profile });
 
     }
 
@@ -259,12 +263,46 @@ public:
 
 	void rank_frames()
 	{
+		std::cout << "SN:\n" << std::endl;
 
+		for (auto frame : list)
+		{
+			//std::cout <<"<" <<rs2_stream_to_string(frame.second.get_profile().stream_type())<<">" << std::endl;
+			//std::cout << "<" << strcmp(rs2_stream_to_string(frame.second.get_profile().stream_type()) , "Color") << ">" << std::endl;
+			//if (rs2_stream_to_string(frame.second.get_profile().stream_type()) == "Color") {
+			auto frm_tp=rs2_stream_to_string(frame.second.get_profile().stream_type());
+			std::cout << frm_tp << std::endl;
+			//}
+		}
 
+		for (auto frame : list)
+		{
+			//std::cout <<"<" <<rs2_stream_to_string(frame.second.get_profile().stream_type())<<">" << std::endl;
+			//std::cout << "<" << strcmp(rs2_stream_to_string(frame.second.get_profile().stream_type()) , "Color") << ">" << std::endl;
+			//if (rs2_stream_to_string(frame.second.get_profile().stream_type()) == "Color") {
+				std::cout << frame.first << std::endl;
+			//}
+		}
+		std::cout << "frm_cnt:\n" << std::endl;
+		for (auto frame : list)
+		{
+			auto frm_cnt = frame.second.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+			std::cout << frm_cnt << std::endl;
+		}
 
+		std::cout << "ts_bkend:\n" << std::endl;
+		for (auto frame : list)
+		{
+			auto ts_bkend = frame.second.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+			std::cout << ts_bkend << std::endl;
+		}
 
-
-
+		std::cout << "ts_sensor:\n" << std::endl;
+		for (auto frame : list)
+		{
+			auto ts_sensor = frame.second.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
+			std::cout << ts_sensor << std::endl;
+		}
 
 	}
 
@@ -307,7 +345,8 @@ public:
 						raw_file >> raw_filename;
 						raw_filename = ".\\images\\" + raw_filename;
 						if (save_frame_raw_data(raw_filename, frame.second))
-							std::cout << "Raw data is captured into " << raw_filename << std::endl;
+						std::cout << "Raw data is captured into " << raw_filename << std::endl;
+						
 					}
  
 					else
@@ -321,7 +360,7 @@ public:
 						png_filename = ".\\images\\" + png_filename;
 						stbi_write_png(png_filename.c_str(), vf.get_width(), vf.get_height(),
 							vf.get_bytes_per_pixel(), vf.get_data(), vf.get_stride_in_bytes());
-						std::cout << "Saved " << png_filename << std::endl;
+						//std::cout << "Saved " << png_filename << std::endl;
 # if(0)
 						//// Record per-frame metadata for UVC streams
 						//std::stringstream csv_file;
@@ -337,6 +376,7 @@ public:
 				
 			
 		}
+
 	}
 
 
@@ -390,6 +430,7 @@ private:
     std::mutex _mutex;
     std::map<std::string, view_port> _devices;
 	std::pair<std::string, rs2::frame> sn_frame;
+	//std::tuple<int,>
 	int skip_frame_num = -10;
 };
 
@@ -397,7 +438,7 @@ private:
 int main(int argc, char * argv[]) try
 {
     // Create a simple OpenGL window for rendering:
-    window app(1280, 960, "CPP Multi-Camera Example");
+    window app(1280,960, "CPP Multi-Camera Example");
 
     device_container connected_devices;
 
@@ -421,7 +462,8 @@ int main(int argc, char * argv[]) try
 	connected_devices.set_masterslave(ctx);
 
 	int index = 0;
-    while (index<30) // Application still alive?
+    //while (app&&index<30) // Application still alive?
+	while(app)
     {
         connected_devices.poll_frames();
 		index++;
@@ -451,7 +493,7 @@ int main(int argc, char * argv[]) try
         connected_devices.render_textures(cols, rows, view_width, view_height);
     }
 	//connected_devices.rank_frames();
-	connected_devices.save_frames();
+	//connected_devices.save_frames();
 	connected_devices.clear_frames();
 	//index = 0;
 	
