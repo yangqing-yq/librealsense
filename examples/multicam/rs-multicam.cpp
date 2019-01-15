@@ -228,6 +228,7 @@ public:
 
 					//printf("%s, ae=%lld\n", rs2_stream_to_string(frame.get_profile().stream_type()), exp);
 
+
 					for (int i = 0; i < frameset.size(); i++)
 					{
 						rs2::frame frame = frameset[i];
@@ -260,6 +261,76 @@ public:
 			}
 		
     }
+
+	void poll_transfered_frames()
+	{
+		std::lock_guard<std::mutex> lock(_mutex);
+
+		// Declare depth colorizer for pretty visualization of depth data
+		rs2::colorizer color_map;
+
+		skip_frame_num++;
+		// Go over all device
+
+		for (auto&& view : _devices)
+		{
+			printf("sn: %s\n", view.second.dev.c_str());
+			sn_frame.first = view.second.dev;
+			// Ask each pipeline if there are new frames available
+			rs2::frameset frameset;
+			if (view.second.pipe.poll_for_frames(&frameset))
+			{
+
+				auto depth_frame = frameset.get_depth_frame().as<rs2::video_frame>();
+
+				const uint16_t * z = reinterpret_cast<const uint16_t *>(depth_frame.get_data());
+
+				int size =  (depth_frame.get_height()*depth_frame.get_width());
+				uint16_t *  out=new uint16_t[size];
+				
+				auto z_near_r = 1 / 0.3;
+				auto z_far_r = 1 / 10;
+				auto v_max = 1024;
+				for (auto i=0; i<size; i++)
+				{
+
+					if (!(*z)) 
+						*out= static_cast<uint16_t>((1 - z_far_r) / (z_near_r - z_far_r)*v_max);
+					else
+						*out = static_cast<uint16_t>((1 / *z - z_far_r) / (z_near_r - z_far_r)*v_max);
+				}
+
+
+				for (int i = 0; i < frameset.size(); i++)
+				{
+					rs2::frame frame = frameset[i];
+					//keep frame
+					//auto raw_data = frameset.get_depth_frame();
+					//raw_data.keep();
+					if (skip_frame_num > 0)
+					{
+						frame.keep();
+						sn_frame.second = frame;
+						list.emplace_back(sn_frame);
+					}
+
+					//auto exp = frame.get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE);
+					auto ts_bkend = frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+					auto ts_toa = frame.get_frame_metadata(RS2_FRAME_METADATA_TIME_OF_ARRIVAL);
+					auto ts_frame = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP);
+					auto ts_sensor = frame.get_frame_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP);
+					auto frm_id = frame.get_frame_number();
+					auto frm_cnt = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+					auto frm_tp = rs2_stream_to_string(frame.get_profile().stream_type());
+					printf("                %s id=%lld cnt=%lld tsbk=%lld tstoa=%lld tsf=%lld tss=%lld\n", frm_tp, frm_id, frm_cnt, ts_bkend, ts_toa, ts_frame, ts_sensor);
+
+					int stream_id = frame.get_profile().unique_id();
+					view.second.frames_per_stream[stream_id] = view.second.colorize_frame.process(frame); //update view port with the new stream
+				}
+			}
+		}
+
+	}
 
 	void rank_frames()
 	{
@@ -465,7 +536,9 @@ int main(int argc, char * argv[]) try
     //while (app&&index<30) // Application still alive?
 	while(app)
     {
-        connected_devices.poll_frames();
+		//-------poll_frames-----
+		//connected_devices.poll_frames();
+        connected_devices.poll_transfered_frames();
 		index++;
 
 		//save raw when got frameset num = 10 * camera num
